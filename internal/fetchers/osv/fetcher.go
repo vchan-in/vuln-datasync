@@ -76,7 +76,9 @@ func (f *Fetcher) FetchAll(ctx context.Context, ecosystems []string) ([]*types.O
 	}
 	defer func() {
 		if closer, ok := reader.(io.Closer); ok {
-			closer.Close()
+			if err := closer.Close(); err != nil {
+				log.Warn().Err(err).Msg("failed to close reader")
+			}
 		}
 	}()
 
@@ -158,7 +160,9 @@ func (f *Fetcher) fetchFromHTTP(ctx context.Context) (io.Reader, error) {
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		resp.Body.Close()
+		if err := resp.Body.Close(); err != nil {
+			log.Warn().Err(err).Msg("failed to close response body")
+		}
 		return nil, fmt.Errorf("HTTP error: %s", resp.Status)
 	}
 
@@ -175,7 +179,9 @@ func (f *Fetcher) processZipStream(ctx context.Context, reader io.Reader, ecosys
 
 	// Close reader if it's a closer
 	if closer, ok := reader.(io.Closer); ok {
-		closer.Close()
+		if err := closer.Close(); err != nil {
+			log.Warn().Err(err).Msg("failed to close reader")
+		}
 	}
 
 	log.Info().
@@ -325,7 +331,11 @@ func (f *Fetcher) processJSONFile(file *zip.File, ecosystemFilter map[string]boo
 	if err != nil {
 		return nil, fmt.Errorf("failed to open file: %w", err)
 	}
-	defer reader.Close()
+	defer func() {
+		if err := reader.Close(); err != nil {
+			log.Warn().Err(err).Msg("failed to close file reader")
+		}
+	}()
 
 	var vuln types.OSVVulnerability
 	if err := json.NewDecoder(reader).Decode(&vuln); err != nil {

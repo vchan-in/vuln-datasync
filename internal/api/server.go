@@ -100,7 +100,9 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(statusCode)
-	json.NewEncoder(w).Encode(health)
+	if err := json.NewEncoder(w).Encode(health); err != nil {
+		log.Error().Err(err).Msg("failed to encode health response")
+	}
 }
 
 // handleMetrics returns system metrics
@@ -133,7 +135,9 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(metrics)
+	if err := json.NewEncoder(w).Encode(metrics); err != nil {
+		log.Error().Err(err).Msg("failed to encode metrics response")
+	}
 }
 
 // handleSync triggers vulnerability synchronization
@@ -179,7 +183,9 @@ func (s *Server) handleSync(w http.ResponseWriter, r *http.Request) {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusAccepted)
-		json.NewEncoder(w).Encode(response)
+		if err := json.NewEncoder(w).Encode(response); err != nil {
+			log.Error().Err(err).Msg("failed to encode sync response")
+		}
 	} else {
 		// Synchronous processing (not implemented yet)
 		response := &types.SyncResponse{
@@ -189,7 +195,9 @@ func (s *Server) handleSync(w http.ResponseWriter, r *http.Request) {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusNotImplemented)
-		json.NewEncoder(w).Encode(response)
+		if err := json.NewEncoder(w).Encode(response); err != nil {
+			log.Error().Err(err).Msg("failed to encode sync response")
+		}
 	}
 }
 
@@ -203,7 +211,9 @@ func (s *Server) handleSyncStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(status)
+	if err := json.NewEncoder(w).Encode(status); err != nil {
+		log.Error().Err(err).Msg("failed to encode status response")
+	}
 }
 
 // handleJobStatus returns job queue status
@@ -217,7 +227,9 @@ func (s *Server) handleJobStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(status)
+	if err := json.NewEncoder(w).Encode(status); err != nil {
+		log.Error().Err(err).Msg("failed to encode job status response")
+	}
 }
 
 // handleJobDetails returns details for a specific job
@@ -233,7 +245,9 @@ func (s *Server) handleJobDetails(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(jobDetails)
+	if err := json.NewEncoder(w).Encode(jobDetails); err != nil {
+		log.Error().Err(err).Msg("failed to encode job details response")
+	}
 }
 
 // handleExport triggers database export
@@ -252,7 +266,9 @@ func (s *Server) handleExport(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusAccepted)
-	json.NewEncoder(w).Encode(response)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		log.Error().Err(err).Msg("failed to encode export response")
+	}
 }
 
 // handleListExports returns list of exports
@@ -267,7 +283,9 @@ func (s *Server) handleListExports(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(exports)
+	if err := json.NewEncoder(w).Encode(exports); err != nil {
+		log.Error().Err(err).Msg("failed to encode exports response")
+	}
 }
 
 // handleStats returns system statistics
@@ -288,7 +306,9 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(stats)
+	if err := json.NewEncoder(w).Encode(stats); err != nil {
+		log.Error().Err(err).Msg("failed to encode stats response")
+	}
 }
 
 // loggingMiddleware logs HTTP requests

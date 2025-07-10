@@ -92,7 +92,7 @@ env-setup: ## Set up development environment tools
 	fi
 	@if ! command -v gosec >/dev/null 2>&1; then \
 		echo "$(YELLOW)Installing gosec...$(RESET)"; \
-		$(GO) install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest; \
+		$(GO) install github.com/securego/gosec/v2/cmd/gosec@latest; \
 	fi
 	@echo "$(GREEN)Development environment ready!$(RESET)"
 

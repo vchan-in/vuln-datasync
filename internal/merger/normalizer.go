@@ -82,9 +82,7 @@ func (n *Normalizer) extractOSVAffected(osv *types.OSVVulnerability, vuln *types
 	vuln.PackageName = affected.Package.Name
 
 	// Extract version information
-	for _, version := range affected.Versions {
-		vuln.AffectedVersions = append(vuln.AffectedVersions, version)
-	}
+	vuln.AffectedVersions = append(vuln.AffectedVersions, affected.Versions...)
 
 	// Extract ranges
 	for _, r := range affected.Ranges {

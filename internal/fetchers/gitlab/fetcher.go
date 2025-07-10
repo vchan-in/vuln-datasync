@@ -13,10 +13,10 @@ import (
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/rs/zerolog/log"
+	"github.com/yourusername/vuln-datasync/internal/types"
 	"gopkg.in/yaml.v3"
 
 	"github.com/yourusername/vuln-datasync/internal/config"
-	"github.com/yourusername/vuln-datasync/internal/types"
 )
 
 // Fetcher implements GitLab vulnerability data fetching
@@ -219,6 +219,12 @@ func (f *Fetcher) processWorker(ctx context.Context, fileCh <-chan string, vulne
 		default:
 		}
 
+		// Validate file path to prevent directory traversal attacks
+		if err := f.validateFilePath(filePath); err != nil {
+			log.Warn().Err(err).Str("file", filePath).Msg("invalid file path, skipping")
+			continue
+		}
+
 		vuln := f.processFile(filePath, ecosystemFilter, ecosystems)
 		if vuln != nil {
 			mu.Lock()
@@ -253,7 +259,12 @@ func (f *Fetcher) processFile(filePath string, ecosystemFilter map[string]bool, 
 
 // parseVulnerabilityFile parses a single YAML vulnerability file
 func (f *Fetcher) parseVulnerabilityFile(filePath string) (*types.GitLabVulnerability, error) {
-	data, err := os.ReadFile(filePath)
+	// Validate file path for security
+	if err := f.validateFilePath(filePath); err != nil {
+		return nil, fmt.Errorf("invalid file path: %w", err)
+	}
+
+	data, err := os.ReadFile(filePath) // #nosec G304 -- File path is validated by validateFilePath above
 	if err != nil {
 		return nil, fmt.Errorf("failed to read file %s: %w", filePath, err)
 	}
@@ -312,6 +323,34 @@ func (f *Fetcher) extractPackageFromPath(filePath string) string {
 		}
 	}
 	return ""
+}
+
+// validateFilePath ensures the file path is safe and within expected boundaries
+func (f *Fetcher) validateFilePath(filePath string) error {
+	// Clean the path to prevent directory traversal
+	cleanPath := filepath.Clean(filePath)
+
+	// Check for directory traversal attempts
+	if strings.Contains(cleanPath, "..") {
+		return fmt.Errorf("invalid file path: contains directory traversal")
+	}
+
+	// Ensure the path is within the work directory
+	absPath, err := filepath.Abs(cleanPath)
+	if err != nil {
+		return fmt.Errorf("failed to get absolute path: %w", err)
+	}
+
+	absWorkDir, err := filepath.Abs(f.workDir)
+	if err != nil {
+		return fmt.Errorf("failed to get absolute work directory: %w", err)
+	}
+
+	if !strings.HasPrefix(absPath, absWorkDir) {
+		return fmt.Errorf("file path is outside work directory")
+	}
+
+	return nil
 }
 
 // Cleanup removes temporary files

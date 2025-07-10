@@ -128,7 +128,7 @@ func (c *Config) validate() error {
 	}
 
 	if c.Redis.Addr == "" {
-		return fmt.Errorf("Redis address is required")
+		return fmt.Errorf("redis address is required")
 	}
 
 	if c.Performance.OSVWorkers <= 0 {

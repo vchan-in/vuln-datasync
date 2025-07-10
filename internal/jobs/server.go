@@ -288,7 +288,11 @@ func (s *Server) processGitLabSource(ctx context.Context, ecosystems []string) t
 		result.Duration = result.EndTime.Sub(result.StartTime).String()
 		return result
 	}
-	defer gitlabFetcher.Cleanup()
+	defer func() {
+		if err := gitlabFetcher.Cleanup(); err != nil {
+			log.Warn().Err(err).Msg("failed to cleanup gitlab fetcher")
+		}
+	}()
 
 	// Fetch GitLab vulnerabilities
 	gitlabVulns, err := gitlabFetcher.FetchAll(ctx, ecosystems)
@@ -371,7 +375,11 @@ func (s *Server) processCVESource(ctx context.Context, ecosystems []string) type
 		result.Duration = result.EndTime.Sub(result.StartTime).String()
 		return result
 	}
-	defer cveFetcher.Cleanup()
+	defer func() {
+		if err := cveFetcher.Cleanup(); err != nil {
+			log.Warn().Err(err).Msg("failed to cleanup cve fetcher")
+		}
+	}()
 
 	// Fetch CVE vulnerabilities
 	vulnerabilities, err := cveFetcher.FetchAll(ctx, ecosystems)
@@ -828,23 +836,6 @@ func (l *AsynqLogger) Error(args ...interface{}) {
 
 func (l *AsynqLogger) Fatal(args ...interface{}) {
 	log.Fatal().Msg(fmt.Sprint(args...))
-}
-
-// processVulnerability processes a single normalized vulnerability
-func (s *Server) processVulnerability(ctx context.Context, normalized *types.Vulnerability, vulnMerger *merger.VulnerabilityMerger) error {
-	// Try to merge with existing vulnerability
-	existing, err := vulnMerger.FindMatchingVulnerability(ctx, normalized.Aliases)
-	if err != nil {
-		log.Warn().Err(err).Str("id", normalized.ID).Msg(errFindMatchingVuln)
-	}
-
-	if existing != nil {
-		// Merge with existing vulnerability
-		return vulnMerger.MergeVulnerabilities(ctx, existing, normalized)
-	} else {
-		// Insert new vulnerability using database upsert
-		return s.upsertVulnerability(ctx, normalized)
-	}
 }
 
 // processSingleOSVVuln processes a single OSV vulnerability and updates result

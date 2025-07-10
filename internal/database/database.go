@@ -23,9 +23,17 @@ func New(cfg config.DatabaseConfig) (*Service, error) {
 		return nil, fmt.Errorf("failed to parse database DSN: %w", err)
 	}
 
-	// Set pool configuration based on config
-	poolConfig.MaxConns = int32(cfg.MaxConns)
-	poolConfig.MinConns = int32(cfg.MinConns)
+	// Set pool configuration based on config with bounds checking
+	// Prevent integer overflow when converting to int32
+	if cfg.MaxConns > 2147483647 || cfg.MaxConns < 0 {
+		return nil, fmt.Errorf("MaxConns value %d is out of valid range (0-2147483647)", cfg.MaxConns)
+	}
+	if cfg.MinConns > 2147483647 || cfg.MinConns < 0 {
+		return nil, fmt.Errorf("MinConns value %d is out of valid range (0-2147483647)", cfg.MinConns)
+	}
+
+	poolConfig.MaxConns = int32(cfg.MaxConns) // #nosec G115 -- Integer overflow protection is implemented above
+	poolConfig.MinConns = int32(cfg.MinConns) // #nosec G115 -- Integer overflow protection is implemented above
 	poolConfig.MaxConnLifetime = time.Duration(cfg.MaxLifetime) * time.Minute
 	poolConfig.MaxConnIdleTime = time.Duration(cfg.MaxIdleTime) * time.Minute
 	poolConfig.HealthCheckPeriod = 1 * time.Minute

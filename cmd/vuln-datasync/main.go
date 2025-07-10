@@ -51,7 +51,11 @@ func main() {
 		Password: cfg.Redis.Password,
 		DB:       cfg.Redis.DB,
 	})
-	defer asynqClient.Close()
+	defer func() {
+		if err := asynqClient.Close(); err != nil {
+			log.Warn().Err(err).Msg("failed to close asynq client")
+		}
+	}()
 
 	// Initialize background job server
 	jobServer, err := jobs.NewServer(cfg, db)
