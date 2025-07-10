@@ -1,0 +1,24 @@
+services:
+  postgres:
+    container_name: vulndatasync_db
+    image: postgres:16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: L0Quh1ACOYr6GJs2tU-hnT?EVao5A?
+      POSTGRES_DB: vulndb
+    ports:
+      - 5432:5432
+    volumes:
+      - vulndatasync_pgdata:/var/lib/postgresql/data
+
+  redis:
+    container_name: vulndatasync_redis
+    image: redis:7
+    ports:
+      - 6379:6379
+    volumes:
+      - vulndatasync_redis:/data
+
+volumes:
+  vulndatasync_pgdata:
+  vulndatasync_redis:
