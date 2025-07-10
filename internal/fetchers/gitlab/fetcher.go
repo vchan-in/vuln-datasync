@@ -13,10 +13,10 @@ import (
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/rs/zerolog/log"
-	"github.com/yourusername/vuln-datasync/internal/types"
+	"github.com/vchan-in/vuln-datasync/internal/types"
 	"gopkg.in/yaml.v3"
 
-	"github.com/yourusername/vuln-datasync/internal/config"
+	"github.com/vchan-in/vuln-datasync/internal/config"
 )
 
 // Fetcher implements GitLab vulnerability data fetching

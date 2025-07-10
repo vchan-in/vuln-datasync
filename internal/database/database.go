@@ -7,7 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog/log"
-	"github.com/yourusername/vuln-datasync/internal/config"
+	"github.com/vchan-in/vuln-datasync/internal/config"
 )
 
 // Service represents the database service

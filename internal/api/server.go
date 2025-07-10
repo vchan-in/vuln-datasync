@@ -8,9 +8,9 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/hibiken/asynq"
 	"github.com/rs/zerolog/log"
-	"github.com/yourusername/vuln-datasync/internal/config"
-	"github.com/yourusername/vuln-datasync/internal/database"
-	"github.com/yourusername/vuln-datasync/internal/types"
+	"github.com/vchan-in/vuln-datasync/internal/config"
+	"github.com/vchan-in/vuln-datasync/internal/database"
+	"github.com/vchan-in/vuln-datasync/internal/types"
 )
 
 // Server represents the HTTP API server

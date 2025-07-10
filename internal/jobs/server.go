@@ -9,14 +9,14 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/rs/zerolog/log"
-	"github.com/yourusername/vuln-datasync/internal/config"
-	"github.com/yourusername/vuln-datasync/internal/database"
-	db "github.com/yourusername/vuln-datasync/internal/database/generated"
-	"github.com/yourusername/vuln-datasync/internal/fetchers/cve"
-	"github.com/yourusername/vuln-datasync/internal/fetchers/gitlab"
-	"github.com/yourusername/vuln-datasync/internal/fetchers/osv"
-	"github.com/yourusername/vuln-datasync/internal/merger"
-	"github.com/yourusername/vuln-datasync/internal/types"
+	"github.com/vchan-in/vuln-datasync/internal/config"
+	"github.com/vchan-in/vuln-datasync/internal/database"
+	db "github.com/vchan-in/vuln-datasync/internal/database/generated"
+	"github.com/vchan-in/vuln-datasync/internal/fetchers/cve"
+	"github.com/vchan-in/vuln-datasync/internal/fetchers/gitlab"
+	"github.com/vchan-in/vuln-datasync/internal/fetchers/osv"
+	"github.com/vchan-in/vuln-datasync/internal/merger"
+	"github.com/vchan-in/vuln-datasync/internal/types"
 )
 
 // Job type constants

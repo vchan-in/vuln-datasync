@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/yourusername/vuln-datasync/internal/merger"
-	"github.com/yourusername/vuln-datasync/internal/types"
+	"github.com/vchan-in/vuln-datasync/internal/merger"
+	"github.com/vchan-in/vuln-datasync/internal/types"
 )
 
 // Simple test to verify core functionality

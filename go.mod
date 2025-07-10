@@ -1,4 +1,4 @@
-module github.com/yourusername/vuln-datasync
+module github.com/vchan-in/vuln-datasync
 
 go 1.23
 

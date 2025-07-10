@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yourusername/vuln-datasync/internal/types"
+	"github.com/vchan-in/vuln-datasync/internal/types"
 )
 
 // Normalizer converts different vulnerability formats to the standard format
