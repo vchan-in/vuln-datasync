@@ -9,10 +9,15 @@ import (
 	"time"
 
 	"github.com/vchan-in/vuln-datasync/internal/types"
+	"github.com/vchan-in/vuln-datasync/internal/utils"
 )
 
 // Normalizer converts different vulnerability formats to the standard format
 type Normalizer struct{}
+
+const (
+	errCustomIDGeneration = "failed to generate custom vulnerability ID: %w"
+)
 
 // NewNormalizer creates a new vulnerability normalizer
 func NewNormalizer() *Normalizer {
@@ -21,11 +26,22 @@ func NewNormalizer() *Normalizer {
 
 // NormalizeOSV converts OSV vulnerability to standard format
 func (n *Normalizer) NormalizeOSV(osv *types.OSVVulnerability) (*types.Vulnerability, error) {
+	// Generate custom ID
+	customID, err := utils.GenerateCustomVulnID()
+	if err != nil {
+		return nil, fmt.Errorf(errCustomIDGeneration, err)
+	}
+
+	// Create aliases list including the original OSV ID
+	aliases := make([]string, 0, len(osv.Aliases)+1)
+	aliases = append(aliases, osv.ID) // Add original OSV ID as first alias
+	aliases = append(aliases, osv.Aliases...)
+
 	vuln := &types.Vulnerability{
-		ID:               osv.ID,
+		ID:               customID, // Use custom ID instead of osv.ID
 		Summary:          osv.Summary,
 		Details:          osv.Details,
-		Aliases:          osv.Aliases,
+		Aliases:          aliases, // Include original ID in aliases
 		References:       make(map[string]interface{}),
 		Source:           []string{"osv"},
 		AffectedVersions: []string{},
@@ -105,22 +121,31 @@ func (n *Normalizer) extractOSVReferences(osv *types.OSVVulnerability, vuln *typ
 
 // NormalizeGitLab converts GitLab vulnerability to standard format
 func (n *Normalizer) NormalizeGitLab(gitlab *types.GitLabVulnerability) (*types.Vulnerability, error) {
+	// Generate custom ID
+	customID, err := utils.GenerateCustomVulnID()
+	if err != nil {
+		return nil, fmt.Errorf(errCustomIDGeneration, err)
+	}
+
+	// Create aliases list including the original GitLab ID
+	aliases := []string{gitlab.Identifier} // Add original GitLab ID as first alias
+
+	// Add CVE to aliases if present
+	if gitlab.CVE != "" {
+		aliases = append(aliases, gitlab.CVE)
+	}
+
 	vuln := &types.Vulnerability{
-		ID:               gitlab.Identifier,
+		ID:               customID, // Use custom ID instead of gitlab.Identifier
 		Summary:          gitlab.Title,
 		Details:          gitlab.Description,
-		Aliases:          []string{},
+		Aliases:          aliases, // Include original ID in aliases
 		References:       make(map[string]interface{}),
 		Source:           []string{"gitlab"},
 		AffectedVersions: gitlab.AffectedVersions,
 		FixedVersions:    gitlab.FixedVersions,
 		CreatedAt:        time.Now(),
 		UpdatedAt:        time.Now(),
-	}
-
-	// Add CVE to aliases if present
-	if gitlab.CVE != "" {
-		vuln.Aliases = append(vuln.Aliases, gitlab.CVE)
 	}
 
 	// Parse timestamps
@@ -168,9 +193,18 @@ func (n *Normalizer) NormalizeGitLab(gitlab *types.GitLabVulnerability) (*types.
 
 // NormalizeCVE converts CVE vulnerability to standard format
 func (n *Normalizer) NormalizeCVE(cve *types.CVEVulnerability) (*types.Vulnerability, error) {
+	// Generate custom ID
+	customID, err := utils.GenerateCustomVulnID()
+	if err != nil {
+		return nil, fmt.Errorf(errCustomIDGeneration, err)
+	}
+
+	// Create aliases list including the original CVE ID
+	aliases := []string{cve.CVEMetadata.CVEID} // Add original CVE ID as first alias
+
 	vuln := &types.Vulnerability{
-		ID:               cve.CVEMetadata.CVEID,
-		Aliases:          []string{},
+		ID:               customID, // Use custom ID instead of cve.CVEMetadata.CVEID
+		Aliases:          aliases,  // Include original ID in aliases
 		References:       make(map[string]interface{}),
 		Source:           []string{"cve"},
 		AffectedVersions: []string{},

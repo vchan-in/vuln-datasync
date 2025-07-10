@@ -13,7 +13,7 @@ import (
 
 type BatchUpsertVulnerabilitiesParams struct {
 	ID               string             `json:"id"`
-	Summary          string             `json:"summary"`
+	Summary          pgtype.Text        `json:"summary"`
 	Details          pgtype.Text        `json:"details"`
 	Severity         pgtype.Text        `json:"severity"`
 	PublishedAt      pgtype.Timestamptz `json:"published_at"`
@@ -119,7 +119,7 @@ INSERT INTO vulnerabilities (
 
 type CreateVulnerabilityParams struct {
 	ID               string             `json:"id"`
-	Summary          string             `json:"summary"`
+	Summary          pgtype.Text        `json:"summary"`
 	Details          pgtype.Text        `json:"details"`
 	Severity         pgtype.Text        `json:"severity"`
 	PublishedAt      pgtype.Timestamptz `json:"published_at"`
@@ -567,7 +567,7 @@ RETURNING id, summary, details, severity, published_at, modified_at, ecosystem, 
 
 type UpdateVulnerabilityParams struct {
 	ID               string             `json:"id"`
-	Summary          string             `json:"summary"`
+	Summary          pgtype.Text        `json:"summary"`
 	Details          pgtype.Text        `json:"details"`
 	Severity         pgtype.Text        `json:"severity"`
 	PublishedAt      pgtype.Timestamptz `json:"published_at"`
@@ -653,7 +653,7 @@ RETURNING id, summary, details, severity, published_at, modified_at, ecosystem, 
 
 type UpsertVulnerabilityParams struct {
 	ID               string             `json:"id"`
-	Summary          string             `json:"summary"`
+	Summary          pgtype.Text        `json:"summary"`
 	Details          pgtype.Text        `json:"details"`
 	Severity         pgtype.Text        `json:"severity"`
 	PublishedAt      pgtype.Timestamptz `json:"published_at"`

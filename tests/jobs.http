@@ -1,0 +1,61 @@
+# Job Management and Monitoring Tests
+
+@baseUrl = http://localhost:8080
+@apiVersion = v1
+
+### Get All Active Jobs
+GET {{baseUrl}}/api/{{apiVersion}}/jobs/status
+
+### Get Job Statistics
+GET {{baseUrl}}/api/{{apiVersion}}/jobs/stats
+
+### Get Detailed Job Information
+# Replace {job-id} with actual job ID
+GET {{baseUrl}}/api/{{apiVersion}}/jobs/{job-id}
+
+### Cancel Running Job
+# Replace {job-id} with actual job ID
+DELETE {{baseUrl}}/api/{{apiVersion}}/jobs/{job-id}
+
+### Retry Failed Job
+# Replace {job-id} with actual job ID
+POST {{baseUrl}}/api/{{apiVersion}}/jobs/{job-id}/retry
+
+### Schedule Periodic Sync Job
+POST {{baseUrl}}/api/{{apiVersion}}/jobs/schedule
+Content-Type: application/json
+
+{
+  "job_type": "sync:vulnerabilities",
+  "schedule": "@daily",
+  "payload": {
+    "sources": ["osv", "gitlab", "cve"],
+    "force": false,
+    "config": {
+      "osv_workers": 20,
+      "batch_size": 1000
+    }
+  }
+}
+
+### Schedule Database Cleanup Job
+POST {{baseUrl}}/api/{{apiVersion}}/jobs/schedule
+Content-Type: application/json
+
+{
+  "job_type": "cleanup:old_data",
+  "schedule": "@weekly",
+  "payload": {
+    "retention_days": 30,
+    "cleanup_logs": true
+  }
+}
+
+### Get Job Queue Status
+GET {{baseUrl}}/api/{{apiVersion}}/jobs/queues
+
+### Clear Failed Jobs
+DELETE {{baseUrl}}/api/{{apiVersion}}/jobs/failed
+
+### Get Job Performance Metrics
+GET {{baseUrl}}/api/{{apiVersion}}/jobs/metrics

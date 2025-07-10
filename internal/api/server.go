@@ -168,7 +168,14 @@ func (s *Server) handleSync(w http.ResponseWriter, r *http.Request) {
 		payloadBytes, _ := json.Marshal(payload)
 		task := asynq.NewTask("sync:vulnerabilities", payloadBytes)
 
-		info, err := s.asynqClient.Enqueue(task)
+		// Enqueue to the default queue with retry options
+		opts := []asynq.Option{
+			asynq.Queue("default"),
+			asynq.MaxRetry(3),
+			asynq.Timeout(30 * time.Minute),
+		}
+
+		info, err := s.asynqClient.Enqueue(task, opts...)
 		if err != nil {
 			log.Error().Err(err).Msg("failed to enqueue sync job")
 			http.Error(w, "Failed to queue sync job", http.StatusInternalServerError)

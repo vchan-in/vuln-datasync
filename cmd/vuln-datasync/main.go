@@ -71,6 +71,10 @@ func main() {
 		}
 	}()
 
+	// Give the job server a moment to initialize
+	time.Sleep(2 * time.Second)
+	log.Info().Msg("job server initialization complete")
+
 	// Initialize HTTP API
 	apiServer := api.NewServer(cfg, db, asynqClient)
 	httpServer := &http.Server{

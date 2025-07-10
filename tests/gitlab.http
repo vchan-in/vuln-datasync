@@ -1,0 +1,57 @@
+# GitLab Advisory Database Aggregation Tests
+
+@baseUrl = http://localhost:8080
+@apiVersion = v1
+
+### Trigger GitLab Advisory Sync
+POST {{baseUrl}}/api/{{apiVersion}}/sync
+Content-Type: application/json
+
+{
+  "sources": ["gitlab"],
+  "force": false,
+  "async": true
+}
+
+### Force GitLab Data Refresh with Custom Workers
+POST {{baseUrl}}/api/{{apiVersion}}/sync
+Content-Type: application/json
+
+{
+  "sources": ["gitlab"],
+  "force": true,
+  "async": true,
+  "config": {
+    "gitlab_workers": 10,
+    "batch_size": 500
+  }
+}
+
+### GitLab Sync with Specific Repository
+POST {{baseUrl}}/api/{{apiVersion}}/sync
+Content-Type: application/json
+
+{
+  "sources": ["gitlab"],
+  "force": false,
+  "async": true,
+  "config": {
+    "gitlab_repo_url": "https://gitlab.com/gitlab-org/security-products/gemnasium-db.git",
+    "gitlab_workers": 5
+  }
+}
+
+### GitLab Performance Test
+POST {{baseUrl}}/api/{{apiVersion}}/sync
+Content-Type: application/json
+
+{
+  "sources": ["gitlab"],
+  "force": false,
+  "async": true,
+  "config": {
+    "gitlab_workers": 15,
+    "batch_size": 1000,
+    "enable_git_cache": true
+  }
+}

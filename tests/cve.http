@@ -1,0 +1,57 @@
+# CVE Project Data Aggregation Tests
+
+@baseUrl = http://localhost:8080
+@apiVersion = v1
+
+### Trigger CVE Data Sync
+POST {{baseUrl}}/api/{{apiVersion}}/sync
+Content-Type: application/json
+
+{
+  "sources": ["cve"],
+  "force": false,
+  "async": true
+}
+
+### Force CVE Data Refresh
+POST {{baseUrl}}/api/{{apiVersion}}/sync
+Content-Type: application/json
+
+{
+  "sources": ["cve"],
+  "force": true,
+  "async": true,
+  "config": {
+    "cve_workers": 5,
+    "batch_size": 500
+  }
+}
+
+### CVE Sync with Custom URL
+POST {{baseUrl}}/api/{{apiVersion}}/sync
+Content-Type: application/json
+
+{
+  "sources": ["cve"],
+  "force": false,
+  "async": true,
+  "config": {
+    "cve_project_url": "https://github.com/CVEProject/cvelistV5/archive/refs/heads/main.zip",
+    "cve_workers": 3
+  }
+}
+
+### CVE Performance Test
+POST {{baseUrl}}/api/{{apiVersion}}/sync
+Content-Type: application/json
+
+{
+  "sources": ["cve"],
+  "force": false,
+  "async": true,
+  "config": {
+    "cve_workers": 10,
+    "batch_size": 1000,
+    "extraction_size_limit": 104857600
+  }
+}
