@@ -99,52 +99,6 @@ func (m *VulnerabilityMerger) FindMatchingVulnerability(ctx context.Context, ali
 		return nil, fmt.Errorf("failed to query vulnerability: %w", err)
 	}
 
-	// Convert pgtype values to regular types
-	if summary.Valid {
-		vuln.Summary = summary.String
-	}
-	if details.Valid {
-		vuln.Details = details.String
-	}
-	if severity.Valid {
-		vuln.Severity = severity.String
-	}
-	if ecosystem.Valid {
-		vuln.Ecosystem = ecosystem.String
-	}
-	if packageName.Valid {
-		vuln.PackageName = packageName.String
-	}
-	if dataHash.Valid {
-		vuln.DataHash = dataHash.String
-	}
-	if publishedAt.Valid {
-		vuln.PublishedAt = publishedAt.Time
-	}
-	if modifiedAt.Valid {
-		vuln.ModifiedAt = modifiedAt.Time
-	}
-	if createdAt.Valid {
-		vuln.CreatedAt = createdAt.Time
-	}
-	if updatedAt.Valid {
-		vuln.UpdatedAt = updatedAt.Time
-	}
-
-	// Convert array fields
-	if affectedVersions.Valid {
-		vuln.AffectedVersions = affectedVersions.Elements
-	}
-	if fixedVersions.Valid {
-		vuln.FixedVersions = fixedVersions.Elements
-	}
-	if aliasesArray.Valid {
-		vuln.Aliases = aliasesArray.Elements
-	}
-	if sourceArray.Valid {
-		vuln.Source = sourceArray.Elements
-	}
-
 	// Convert from database model to types model
 	vuln := m.convertDBVulnToType(dbVuln)
 	return vuln, nil
