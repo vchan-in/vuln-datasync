@@ -48,3 +48,14 @@ SELECT
     COUNT(*) FILTER (WHERE state = 'failed') as failed_count,
     COUNT(*) as total_count
 FROM jobs;
+
+-- name: CreateProcessingStat :one
+INSERT INTO processing_stats (
+    source, processed_count, ingested_count, updated_count, 
+    merged_count, skipped_count, error_count, 
+    start_time, end_time, duration_ms
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+RETURNING *;
+
+-- name: DeleteOldProcessingStats :exec
+DELETE FROM processing_stats WHERE start_time < $1;

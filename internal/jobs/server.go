@@ -707,48 +707,46 @@ func (s *Server) cleanupOldJobs(ctx context.Context, retentionDays int) error {
 	return nil
 }
 
-// cleanupOldProcessingStats removes old processing statistics
+// cleanupOldProcessingStats removes old processing statistics using SQLC
 func (s *Server) cleanupOldProcessingStats(ctx context.Context, retentionDays int) error {
 	log.Info().Int("retention_days", retentionDays).Msg("starting processing stats cleanup")
 
-	// For now, just log the operation - in a real implementation this would
-	// delete processing stats older than the retention period
 	cutoffTime := time.Now().AddDate(0, 0, -retentionDays)
+	queries := db.New(s.db.Pool())
 
-	query := `DELETE FROM processing_stats WHERE start_time < $1`
-	result, err := s.db.Pool().Exec(ctx, query, cutoffTime)
+	err := queries.DeleteOldProcessingStats(ctx, pgtype.Timestamptz{Time: cutoffTime, Valid: true})
 	if err != nil {
 		return fmt.Errorf("failed to delete old processing stats: %w", err)
 	}
 
-	rowsAffected := result.RowsAffected()
 	log.Info().
-		Int64("rows_deleted", rowsAffected).
 		Time("cutoff_time", cutoffTime).
 		Int("retention_days", retentionDays).
 		Msg("processing stats cleanup completed")
 	return nil
 }
 
-// storeProcessingStats stores processing statistics in the database
+// storeProcessingStats stores processing statistics in the database using SQLC
 func (s *Server) storeProcessingStats(ctx context.Context, results []types.ProcessingResult) {
-	for _, result := range results {
-		query := `
-			INSERT INTO processing_stats (
-				source, processed_count, ingested_count, updated_count, 
-				merged_count, skipped_count, error_count, 
-				start_time, end_time, duration_ms
-			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-		`
+	queries := db.New(s.db.Pool())
 
+	for _, result := range results {
 		durationMs := int(result.EndTime.Sub(result.StartTime).Milliseconds())
 
-		_, err := s.db.Pool().Exec(ctx, query,
-			result.Source, result.ProcessedCount, result.IngestedCount,
-			result.UpdatedCount, result.MergedCount, result.SkippedCount,
-			result.ErrorCount, result.StartTime, result.EndTime, durationMs,
-		)
+		params := db.CreateProcessingStatParams{
+			Source:         result.Source,
+			ProcessedCount: int32(result.ProcessedCount),
+			IngestedCount:  int32(result.IngestedCount),
+			UpdatedCount:   int32(result.UpdatedCount),
+			MergedCount:    int32(result.MergedCount),
+			SkippedCount:   int32(result.SkippedCount),
+			ErrorCount:     int32(result.ErrorCount),
+			StartTime:      pgtype.Timestamptz{Time: result.StartTime, Valid: true},
+			EndTime:        pgtype.Timestamptz{Time: result.EndTime, Valid: true},
+			DurationMs:     pgtype.Int4{Int32: int32(durationMs), Valid: true},
+		}
 
+		_, err := queries.CreateProcessingStat(ctx, params)
 		if err != nil {
 			log.Error().
 				Err(err).
@@ -877,14 +875,18 @@ func (s *Server) processSingleOSVVuln(ctx context.Context, osvVuln *types.OSVVul
 		return true
 	}
 
-	// Try to merge with existing vulnerability
+	// For same-source updates with deterministic IDs, use efficient upsert
+	// Only use alias matching for cross-source merging scenarios
+
+	// Try to find existing vulnerability with different source (cross-source merging)
 	existing, err := vulnMerger.FindMatchingVulnerability(ctx, normalized.Aliases)
 	if err != nil {
 		log.Warn().Err(err).Str("id", normalized.ID).Msg(errFindMatchingVuln)
 	}
 
-	if existing != nil {
-		// Merge with existing vulnerability
+	// Only merge if we found a vulnerability from a different source
+	if existing != nil && !s.containsSource(existing.Source, normalized.Source[0]) {
+		// Cross-source merge: merge with existing vulnerability from different source
 		if err := vulnMerger.MergeVulnerabilities(ctx, existing, normalized); err != nil {
 			result.ErrorCount++
 			result.Errors = append(result.Errors, fmt.Sprintf(errMergeFailed, normalized.ID, err))
@@ -892,7 +894,7 @@ func (s *Server) processSingleOSVVuln(ctx context.Context, osvVuln *types.OSVVul
 		}
 		result.MergedCount++
 	} else {
-		// Insert new vulnerability using database upsert
+		// Same-source update or new vulnerability: use upsert (handles duplicates automatically)
 		if err := s.upsertVulnerability(ctx, normalized); err != nil {
 			result.ErrorCount++
 			result.Errors = append(result.Errors, fmt.Sprintf(errInsertFailed, normalized.ID, err))
@@ -920,14 +922,18 @@ func (s *Server) processSingleGitLabVuln(ctx context.Context, gitlabVuln *types.
 		return true
 	}
 
-	// Try to merge with existing vulnerability
+	// For same-source updates with deterministic IDs, use efficient upsert
+	// Only use alias matching for cross-source merging scenarios
+
+	// Try to find existing vulnerability with different source (cross-source merging)
 	existing, err := vulnMerger.FindMatchingVulnerability(ctx, normalized.Aliases)
 	if err != nil {
 		log.Warn().Err(err).Str("id", normalized.ID).Msg(errFindMatchingVuln)
 	}
 
-	if existing != nil {
-		// Merge with existing vulnerability
+	// Only merge if we found a vulnerability from a different source
+	if existing != nil && !s.containsSource(existing.Source, normalized.Source[0]) {
+		// Cross-source merge: merge with existing vulnerability from different source
 		if err := vulnMerger.MergeVulnerabilities(ctx, existing, normalized); err != nil {
 			result.ErrorCount++
 			result.Errors = append(result.Errors, fmt.Sprintf(errMergeFailed, normalized.ID, err))
@@ -935,7 +941,7 @@ func (s *Server) processSingleGitLabVuln(ctx context.Context, gitlabVuln *types.
 		}
 		result.MergedCount++
 	} else {
-		// Insert new vulnerability using database upsert
+		// Same-source update or new vulnerability: use upsert (handles duplicates automatically)
 		if err := s.upsertVulnerability(ctx, normalized); err != nil {
 			result.ErrorCount++
 			result.Errors = append(result.Errors, fmt.Sprintf(errInsertFailed, normalized.ID, err))
@@ -963,14 +969,18 @@ func (s *Server) processSingleCVEVuln(ctx context.Context, cveVuln *types.CVEVul
 		return true
 	}
 
-	// Try to merge with existing vulnerability
+	// For same-source updates with deterministic IDs, use efficient upsert
+	// Only use alias matching for cross-source merging scenarios
+
+	// Try to find existing vulnerability with different source (cross-source merging)
 	existing, err := vulnMerger.FindMatchingVulnerability(ctx, normalized.Aliases)
 	if err != nil {
 		log.Warn().Err(err).Str("id", normalized.ID).Msg(errFindMatchingVuln)
 	}
 
-	if existing != nil {
-		// Merge with existing vulnerability
+	// Only merge if we found a vulnerability from a different source
+	if existing != nil && !s.containsSource(existing.Source, normalized.Source[0]) {
+		// Cross-source merge: merge with existing vulnerability from different source
 		if err := vulnMerger.MergeVulnerabilities(ctx, existing, normalized); err != nil {
 			result.ErrorCount++
 			result.Errors = append(result.Errors, fmt.Sprintf(errMergeFailed, normalized.ID, err))
@@ -978,7 +988,7 @@ func (s *Server) processSingleCVEVuln(ctx context.Context, cveVuln *types.CVEVul
 		}
 		result.MergedCount++
 	} else {
-		// Insert new vulnerability using database upsert
+		// Same-source update or new vulnerability: use upsert (handles duplicates automatically)
 		if err := s.upsertVulnerability(ctx, normalized); err != nil {
 			result.ErrorCount++
 			result.Errors = append(result.Errors, fmt.Sprintf(errInsertFailed, normalized.ID, err))
@@ -987,6 +997,16 @@ func (s *Server) processSingleCVEVuln(ctx context.Context, cveVuln *types.CVEVul
 		result.IngestedCount++
 	}
 
+	return false
+}
+
+// containsSource checks if a source array contains a specific source
+func (s *Server) containsSource(sources []string, source string) bool {
+	for _, s := range sources {
+		if s == source {
+			return true
+		}
+	}
 	return false
 }
 

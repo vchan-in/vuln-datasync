@@ -9,7 +9,9 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/rs/zerolog/log"
 	"github.com/vchan-in/vuln-datasync/internal/database"
+	db "github.com/vchan-in/vuln-datasync/internal/database/generated"
 	"github.com/vchan-in/vuln-datasync/internal/types"
+	"github.com/vchan-in/vuln-datasync/internal/utils"
 )
 
 // Source type constants for priority-based merging
@@ -44,33 +46,20 @@ func NewVulnerabilityMerger(db *database.Service) *VulnerabilityMerger {
 func (m *VulnerabilityMerger) LoadAliasCache(ctx context.Context) error {
 	start := time.Now()
 
-	// Query to get all aliases and their vulnerability IDs
-	query := `
-		SELECT id, unnest(aliases) as alias 
-		FROM vulnerabilities 
-		WHERE aliases IS NOT NULL AND array_length(aliases, 1) > 0
-	`
-
-	rows, err := m.db.Pool().Query(ctx, query)
+	// Use SQLC generated query
+	queries := db.New(m.db.Pool())
+	aliases, err := queries.GetAllAliases(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to query vulnerability aliases: %w", err)
 	}
-	defer rows.Close()
 
 	aliasCount := 0
-	for rows.Next() {
-		var vulnID, alias string
-		if err := rows.Scan(&vulnID, &alias); err != nil {
-			log.Error().Err(err).Msg("failed to scan alias row")
-			continue
+	for _, aliasRow := range aliases {
+		// Type assertions for interface{} types
+		if alias, ok := aliasRow.Alias.(string); ok {
+			m.aliasCache[alias] = aliasRow.ID
+			aliasCount++
 		}
-
-		m.aliasCache[alias] = vulnID
-		aliasCount++
-	}
-
-	if err := rows.Err(); err != nil {
-		return fmt.Errorf("error iterating alias rows: %w", err)
 	}
 
 	log.Info().
@@ -81,52 +70,28 @@ func (m *VulnerabilityMerger) LoadAliasCache(ctx context.Context) error {
 	return nil
 }
 
-// FindMatchingVulnerability finds an existing vulnerability with matching aliases
+// FindMatchingVulnerability finds an existing vulnerability with matching aliases using SQLC
 func (m *VulnerabilityMerger) FindMatchingVulnerability(ctx context.Context, aliases []string) (*types.Vulnerability, error) {
 	if len(aliases) == 0 {
 		return nil, nil
 	}
 
+	// Filter out any VULN IDs from aliases (safety check - should not happen)
+	filteredAliases := m.filterValidAliases(aliases)
+	if len(filteredAliases) == 0 {
+		return nil, nil
+	}
+
 	// Check cache first for performance
-	for _, alias := range aliases {
+	for _, alias := range filteredAliases {
 		if vulnID, exists := m.aliasCache[alias]; exists {
 			return m.getVulnerabilityByID(ctx, vulnID)
 		}
 	}
 
-	// Fallback to database query if not in cache
-	query := `
-		SELECT id, summary, details, severity, published_at, modified_at, 
-		       ecosystem, package_name, affected_versions, fixed_versions, 
-		       aliases, refs, source, raw, data_hash, created_at, updated_at
-		FROM vulnerabilities 
-		WHERE aliases && $1
-		ORDER BY 
-			CASE 
-				WHEN 'osv' = ANY(source) THEN 1
-				WHEN 'gitlab' = ANY(source) THEN 2  
-				WHEN 'cve' = ANY(source) THEN 3
-				ELSE 4
-			END
-		LIMIT 1
-	`
-
-	row := m.db.Pool().QueryRow(ctx, query, aliases)
-
-	vuln := &types.Vulnerability{}
-	var summary, details, severity, ecosystem, packageName, dataHash pgtype.Text
-	var publishedAt, modifiedAt, createdAt, updatedAt pgtype.Timestamptz
-	var affectedVersions, fixedVersions, aliasesArray, sourceArray pgtype.Array[string]
-	var refsJSON, rawJSON pgtype.Text
-
-	err := row.Scan(
-		&vuln.ID, &summary, &details, &severity,
-		&publishedAt, &modifiedAt, &ecosystem, &packageName,
-		&affectedVersions, &fixedVersions, &aliasesArray,
-		&refsJSON, &sourceArray, &rawJSON, &dataHash,
-		&createdAt, &updatedAt,
-	)
-
+	// Fallback to database query using SQLC with priority ordering
+	queries := db.New(m.db.Pool())
+	dbVuln, err := queries.GetVulnerabilityByAliasWithPriority(ctx, filteredAliases)
 	if err != nil {
 		if err.Error() == "no rows in result set" {
 			return nil, nil // No match found
@@ -134,69 +99,43 @@ func (m *VulnerabilityMerger) FindMatchingVulnerability(ctx context.Context, ali
 		return nil, fmt.Errorf("failed to query vulnerability: %w", err)
 	}
 
-	// Convert pgtype values to regular types
-	if summary.Valid {
-		vuln.Summary = summary.String
-	}
-	if details.Valid {
-		vuln.Details = details.String
-	}
-	if severity.Valid {
-		vuln.Severity = severity.String
-	}
-	if ecosystem.Valid {
-		vuln.Ecosystem = ecosystem.String
-	}
-	if packageName.Valid {
-		vuln.PackageName = packageName.String
-	}
-	if dataHash.Valid {
-		vuln.DataHash = dataHash.String
-	}
-	if publishedAt.Valid {
-		vuln.PublishedAt = publishedAt.Time
-	}
-	if modifiedAt.Valid {
-		vuln.ModifiedAt = modifiedAt.Time
-	}
-	if createdAt.Valid {
-		vuln.CreatedAt = createdAt.Time
-	}
-	if updatedAt.Valid {
-		vuln.UpdatedAt = updatedAt.Time
-	}
-
-	// Convert array fields
-	if affectedVersions.Valid {
-		vuln.AffectedVersions = affectedVersions.Elements
-	}
-	if fixedVersions.Valid {
-		vuln.FixedVersions = fixedVersions.Elements
-	}
-	if aliasesArray.Valid {
-		vuln.Aliases = aliasesArray.Elements
-	}
-	if sourceArray.Valid {
-		vuln.Source = sourceArray.Elements
-	}
-
-	// Unmarshal JSON fields
-	if refsJSON.Valid && refsJSON.String != "" {
-		if err := json.Unmarshal([]byte(refsJSON.String), &vuln.References); err != nil {
-			log.Error().Err(err).Msg("failed to unmarshal references")
-		}
-	}
-	if rawJSON.Valid && rawJSON.String != "" {
-		if err := json.Unmarshal([]byte(rawJSON.String), &vuln.RawData); err != nil {
-			log.Error().Err(err).Msg("failed to unmarshal raw data")
-		}
-	}
-
+	// Convert from database model to types model
+	vuln := m.convertDBVulnToType(dbVuln)
 	return vuln, nil
+}
+
+// filterValidAliases filters out VULN IDs from aliases to ensure we only match on original source IDs
+func (m *VulnerabilityMerger) filterValidAliases(aliases []string) []string {
+	filtered := make([]string, 0, len(aliases))
+	for _, alias := range aliases {
+		// Skip any VULN IDs - these should never be used for matching
+		if !utils.ValidateCustomVulnID(alias) {
+			filtered = append(filtered, alias)
+		} else {
+			log.Warn().
+				Str("alias", alias).
+				Msg("Filtered out VULN ID from alias matching - this should not happen")
+		}
+	}
+	return filtered
 }
 
 // MergeVulnerabilities merges new vulnerability data with existing vulnerability
 func (m *VulnerabilityMerger) MergeVulnerabilities(ctx context.Context, existing *types.Vulnerability, new *types.Vulnerability) error {
+	// Skip merge if same source and same data hash (no changes)
+	if len(existing.Source) == 1 && len(new.Source) == 1 &&
+		existing.Source[0] == new.Source[0] &&
+		existing.DataHash != "" && new.DataHash != "" &&
+		existing.DataHash == new.DataHash {
+
+		log.Debug().
+			Str("existing_id", existing.ID).
+			Str("source", existing.Source[0]).
+			Str("data_hash", existing.DataHash).
+			Msg("skipping merge - same source and identical data hash")
+		return nil
+	}
+
 	newPriority := getSourcePriority(new.Source)
 	existingPriority := getSourcePriority(existing.Source)
 
@@ -408,98 +347,77 @@ func calculateDataHash(data map[string]interface{}) string {
 	return fmt.Sprintf("%x", len(jsonData))
 }
 
-// getVulnerabilityByID retrieves a vulnerability by ID
+// getVulnerabilityByID retrieves a vulnerability by ID using SQLC
 func (m *VulnerabilityMerger) getVulnerabilityByID(ctx context.Context, id string) (*types.Vulnerability, error) {
-	query := `
-		SELECT id, summary, details, severity, published_at, modified_at, 
-		       ecosystem, package_name, affected_versions, fixed_versions, 
-		       aliases, refs, source, raw, data_hash, created_at, updated_at
-		FROM vulnerabilities 
-		WHERE id = $1
-	`
-
-	row := m.db.Pool().QueryRow(ctx, query, id)
-
-	vuln := &types.Vulnerability{}
-	var summary, details, severity, ecosystem, packageName, dataHash pgtype.Text
-	var publishedAt, modifiedAt, createdAt, updatedAt pgtype.Timestamptz
-	var affectedVersions, fixedVersions, aliasesArray, sourceArray pgtype.Array[string]
-	var refsJSON, rawJSON pgtype.Text
-
-	err := row.Scan(
-		&vuln.ID, &summary, &details, &severity,
-		&publishedAt, &modifiedAt, &ecosystem, &packageName,
-		&affectedVersions, &fixedVersions, &aliasesArray,
-		&refsJSON, &sourceArray, &rawJSON, &dataHash,
-		&createdAt, &updatedAt,
-	)
-
+	queries := db.New(m.db.Pool())
+	dbVuln, err := queries.GetVulnerabilityByID(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get vulnerability by ID: %w", err)
 	}
 
-	// Convert pgtype values to regular types
-	if summary.Valid {
-		vuln.Summary = summary.String
-	}
-	if details.Valid {
-		vuln.Details = details.String
-	}
-	if severity.Valid {
-		vuln.Severity = severity.String
-	}
-	if ecosystem.Valid {
-		vuln.Ecosystem = ecosystem.String
-	}
-	if packageName.Valid {
-		vuln.PackageName = packageName.String
-	}
-	if dataHash.Valid {
-		vuln.DataHash = dataHash.String
-	}
-	if publishedAt.Valid {
-		vuln.PublishedAt = publishedAt.Time
-	}
-	if modifiedAt.Valid {
-		vuln.ModifiedAt = modifiedAt.Time
-	}
-	if createdAt.Valid {
-		vuln.CreatedAt = createdAt.Time
-	}
-	if updatedAt.Valid {
-		vuln.UpdatedAt = updatedAt.Time
+	// Convert from database model to types model
+	vuln := m.convertDBVulnToType(dbVuln)
+	return vuln, nil
+}
+
+// convertDBVulnToType converts a database vulnerability model to types model
+func (m *VulnerabilityMerger) convertDBVulnToType(dbVuln db.Vulnerability) *types.Vulnerability {
+	vuln := &types.Vulnerability{
+		ID:               dbVuln.ID,
+		AffectedVersions: dbVuln.AffectedVersions,
+		FixedVersions:    dbVuln.FixedVersions,
+		Aliases:          dbVuln.Aliases,
+		Source:           dbVuln.Source,
 	}
 
-	// Convert array fields
-	if affectedVersions.Valid {
-		vuln.AffectedVersions = affectedVersions.Elements
+	// Convert pgtype values to regular types
+	if dbVuln.Summary.Valid {
+		vuln.Summary = dbVuln.Summary.String
 	}
-	if fixedVersions.Valid {
-		vuln.FixedVersions = fixedVersions.Elements
+	if dbVuln.Details.Valid {
+		vuln.Details = dbVuln.Details.String
 	}
-	if aliasesArray.Valid {
-		vuln.Aliases = aliasesArray.Elements
+	if dbVuln.Severity.Valid {
+		vuln.Severity = dbVuln.Severity.String
 	}
-	if sourceArray.Valid {
-		vuln.Source = sourceArray.Elements
+	if dbVuln.Ecosystem.Valid {
+		vuln.Ecosystem = dbVuln.Ecosystem.String
+	}
+	if dbVuln.PackageName.Valid {
+		vuln.PackageName = dbVuln.PackageName.String
+	}
+	if dbVuln.DataHash.Valid {
+		vuln.DataHash = dbVuln.DataHash.String
+	}
+	if dbVuln.PublishedAt.Valid {
+		vuln.PublishedAt = dbVuln.PublishedAt.Time
+	}
+	if dbVuln.ModifiedAt.Valid {
+		vuln.ModifiedAt = dbVuln.ModifiedAt.Time
+	}
+	if dbVuln.CreatedAt.Valid {
+		vuln.CreatedAt = dbVuln.CreatedAt.Time
+	}
+	if dbVuln.UpdatedAt.Valid {
+		vuln.UpdatedAt = dbVuln.UpdatedAt.Time
 	}
 
 	// Unmarshal JSON fields
-	if refsJSON.Valid && refsJSON.String != "" {
-		if err := json.Unmarshal([]byte(refsJSON.String), &vuln.References); err != nil {
+	if len(dbVuln.Refs) > 0 {
+		if err := json.Unmarshal(dbVuln.Refs, &vuln.References); err != nil {
 			log.Error().Err(err).Msg("failed to unmarshal references")
 		}
 	}
-	if rawJSON.Valid && rawJSON.String != "" {
-		if err := json.Unmarshal([]byte(rawJSON.String), &vuln.RawData); err != nil {
+	if len(dbVuln.Raw) > 0 {
+		if err := json.Unmarshal(dbVuln.Raw, &vuln.RawData); err != nil {
 			log.Error().Err(err).Msg("failed to unmarshal raw data")
 		}
 	}
 
-	return vuln, nil
+	return vuln
 }
 
-// updateVulnerability updates a vulnerability in the database
+// updateVulnerability updates a vulnerability in the database using SQLC
 func (m *VulnerabilityMerger) updateVulnerability(ctx context.Context, vuln *types.Vulnerability) error {
 	// Marshal JSON fields
 	refsJSON, err := json.Marshal(vuln.References)
@@ -512,27 +430,27 @@ func (m *VulnerabilityMerger) updateVulnerability(ctx context.Context, vuln *typ
 		return fmt.Errorf("failed to marshal raw data: %w", err)
 	}
 
-	sourceJSON, err := json.Marshal(vuln.Source)
-	if err != nil {
-		return fmt.Errorf("failed to marshal source: %w", err)
+	// Convert to SQLC parameters
+	params := db.UpdateVulnerabilityParams{
+		ID:               vuln.ID,
+		Summary:          pgtype.Text{String: vuln.Summary, Valid: vuln.Summary != ""},
+		Details:          pgtype.Text{String: vuln.Details, Valid: vuln.Details != ""},
+		Severity:         pgtype.Text{String: vuln.Severity, Valid: vuln.Severity != ""},
+		PublishedAt:      pgtype.Timestamptz{Time: vuln.PublishedAt, Valid: !vuln.PublishedAt.IsZero()},
+		ModifiedAt:       pgtype.Timestamptz{Time: vuln.ModifiedAt, Valid: !vuln.ModifiedAt.IsZero()},
+		Ecosystem:        pgtype.Text{String: vuln.Ecosystem, Valid: vuln.Ecosystem != ""},
+		PackageName:      pgtype.Text{String: vuln.PackageName, Valid: vuln.PackageName != ""},
+		AffectedVersions: vuln.AffectedVersions,
+		FixedVersions:    vuln.FixedVersions,
+		Aliases:          vuln.Aliases,
+		Refs:             refsJSON,
+		Source:           vuln.Source,
+		Raw:              rawJSON,
+		DataHash:         pgtype.Text{String: vuln.DataHash, Valid: vuln.DataHash != ""},
 	}
 
-	query := `
-		UPDATE vulnerabilities SET
-			summary = $2, details = $3, severity = $4, published_at = $5, 
-			modified_at = $6, ecosystem = $7, package_name = $8, 
-			affected_versions = $9, fixed_versions = $10, aliases = $11, 
-			refs = $12, source = $13, raw = $14, data_hash = $15, updated_at = $16
-		WHERE id = $1
-	`
-
-	_, err = m.db.Pool().Exec(ctx, query,
-		vuln.ID, vuln.Summary, vuln.Details, vuln.Severity,
-		vuln.PublishedAt, vuln.ModifiedAt, vuln.Ecosystem, vuln.PackageName,
-		vuln.AffectedVersions, vuln.FixedVersions, vuln.Aliases,
-		refsJSON, sourceJSON, rawJSON, vuln.DataHash, vuln.UpdatedAt,
-	)
-
+	queries := db.New(m.db.Pool())
+	_, err = queries.UpdateVulnerability(ctx, params)
 	if err != nil {
 		return fmt.Errorf("failed to update vulnerability: %w", err)
 	}

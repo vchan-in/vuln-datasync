@@ -16,9 +16,12 @@ type Querier interface {
 	CountVulnerabilitiesByEcosystem(ctx context.Context) ([]CountVulnerabilitiesByEcosystemRow, error)
 	CountVulnerabilitiesBySource(ctx context.Context) ([]CountVulnerabilitiesBySourceRow, error)
 	CreateJob(ctx context.Context, arg CreateJobParams) (Job, error)
+	CreateProcessingStat(ctx context.Context, arg CreateProcessingStatParams) (ProcessingStat, error)
 	CreateVulnerability(ctx context.Context, arg CreateVulnerabilityParams) (Vulnerability, error)
 	DeleteCompletedJobs(ctx context.Context, completedAt pgtype.Timestamptz) error
+	DeleteOldProcessingStats(ctx context.Context, startTime pgtype.Timestamptz) error
 	DeleteVulnerability(ctx context.Context, id string) error
+	GetAllAliases(ctx context.Context) ([]GetAllAliasesRow, error)
 	GetJob(ctx context.Context, id int32) (Job, error)
 	GetJobStats(ctx context.Context) (GetJobStatsRow, error)
 	GetJobsByState(ctx context.Context, arg GetJobsByStateParams) ([]Job, error)
@@ -29,6 +32,7 @@ type Querier interface {
 	GetVulnerabilitiesByEcosystem(ctx context.Context, arg GetVulnerabilitiesByEcosystemParams) ([]Vulnerability, error)
 	GetVulnerabilitiesByPackage(ctx context.Context, arg GetVulnerabilitiesByPackageParams) ([]Vulnerability, error)
 	GetVulnerabilityByAlias(ctx context.Context, aliases []string) (Vulnerability, error)
+	GetVulnerabilityByAliasWithPriority(ctx context.Context, dollar_1 []string) (Vulnerability, error)
 	GetVulnerabilityByDataHash(ctx context.Context, dataHash pgtype.Text) (Vulnerability, error)
 	GetVulnerabilityByID(ctx context.Context, id string) (Vulnerability, error)
 	GetVulnerabilityStats(ctx context.Context) (VulnerabilityStat, error)

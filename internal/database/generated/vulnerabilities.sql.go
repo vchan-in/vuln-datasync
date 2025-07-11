@@ -185,6 +185,36 @@ func (q *Queries) DeleteVulnerability(ctx context.Context, id string) error {
 	return err
 }
 
+const getAllAliases = `-- name: GetAllAliases :many
+SELECT id, unnest(aliases) as alias 
+FROM vulnerabilities
+`
+
+type GetAllAliasesRow struct {
+	ID    string      `json:"id"`
+	Alias interface{} `json:"alias"`
+}
+
+func (q *Queries) GetAllAliases(ctx context.Context) ([]GetAllAliasesRow, error) {
+	rows, err := q.db.Query(ctx, getAllAliases)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetAllAliasesRow{}
+	for rows.Next() {
+		var i GetAllAliasesRow
+		if err := rows.Scan(&i.ID, &i.Alias); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getRecentVulnerabilities = `-- name: GetRecentVulnerabilities :many
 SELECT id, summary, details, severity, published_at, modified_at, ecosystem, package_name, affected_versions, fixed_versions, aliases, refs, source, raw, data_hash, created_at, updated_at FROM vulnerabilities 
 WHERE created_at >= $1
@@ -441,6 +471,44 @@ SELECT id, summary, details, severity, published_at, modified_at, ecosystem, pac
 
 func (q *Queries) GetVulnerabilityByAlias(ctx context.Context, aliases []string) (Vulnerability, error) {
 	row := q.db.QueryRow(ctx, getVulnerabilityByAlias, aliases)
+	var i Vulnerability
+	err := row.Scan(
+		&i.ID,
+		&i.Summary,
+		&i.Details,
+		&i.Severity,
+		&i.PublishedAt,
+		&i.ModifiedAt,
+		&i.Ecosystem,
+		&i.PackageName,
+		&i.AffectedVersions,
+		&i.FixedVersions,
+		&i.Aliases,
+		&i.Refs,
+		&i.Source,
+		&i.Raw,
+		&i.DataHash,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getVulnerabilityByAliasWithPriority = `-- name: GetVulnerabilityByAliasWithPriority :one
+SELECT id, summary, details, severity, published_at, modified_at, ecosystem, package_name, affected_versions, fixed_versions, aliases, refs, source, raw, data_hash, created_at, updated_at FROM vulnerabilities 
+WHERE aliases && $1::text[]
+ORDER BY 
+    CASE 
+        WHEN 'osv' = ANY(source) THEN 1
+        WHEN 'gitlab' = ANY(source) THEN 2  
+        WHEN 'cve' = ANY(source) THEN 3
+        ELSE 4
+    END
+LIMIT 1
+`
+
+func (q *Queries) GetVulnerabilityByAliasWithPriority(ctx context.Context, dollar_1 []string) (Vulnerability, error) {
+	row := q.db.QueryRow(ctx, getVulnerabilityByAliasWithPriority, dollar_1)
 	var i Vulnerability
 	err := row.Scan(
 		&i.ID,

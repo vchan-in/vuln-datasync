@@ -10,6 +10,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/vchan-in/vuln-datasync/internal/config"
 	"github.com/vchan-in/vuln-datasync/internal/database"
+	db "github.com/vchan-in/vuln-datasync/internal/database/generated"
 	"github.com/vchan-in/vuln-datasync/internal/types"
 )
 
@@ -116,8 +117,10 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 		ByEcosystem map[string]int64 `json:"by_ecosystem"`
 	}
 
-	// Query total vulnerabilities
-	err := s.db.Pool().QueryRow(ctx, "SELECT COUNT(*) FROM vulnerabilities").Scan(&vulnStats.Total)
+	// Query total vulnerabilities using SQLC
+	queries := db.New(s.db.Pool())
+	var err error
+	vulnStats.Total, err = queries.CountVulnerabilities(ctx)
 	if err != nil {
 		log.Error().Err(err).Msg("failed to get total vulnerability count")
 	}
@@ -299,9 +302,9 @@ func (s *Server) handleListExports(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	// Get basic vulnerability count
-	var totalCount int64
-	err := s.db.Pool().QueryRow(ctx, "SELECT COUNT(*) FROM vulnerabilities").Scan(&totalCount)
+	// Get basic vulnerability count using SQLC
+	queries := db.New(s.db.Pool())
+	totalCount, err := queries.CountVulnerabilities(ctx)
 	if err != nil {
 		log.Error().Err(err).Msg("failed to get vulnerability count")
 	}
