@@ -2,6 +2,8 @@ package types
 
 import (
 	"time"
+
+	"gopkg.in/yaml.v3"
 )
 
 // Vulnerability represents a normalized vulnerability record
@@ -82,22 +84,22 @@ type Severity struct {
 
 // GitLabVulnerability represents vulnerability data in GitLab format
 type GitLabVulnerability struct {
-	Identifier       string   `yaml:"identifier" json:"identifier"`
-	Title            string   `yaml:"title" json:"title"`
-	Description      string   `yaml:"description" json:"description"`
-	CVE              string   `yaml:"cve" json:"cve,omitempty"`
-	UUID             string   `yaml:"uuid" json:"uuid,omitempty"`
-	CVSS             string   `yaml:"cvss" json:"cvss,omitempty"`
-	PublishedDate    string   `yaml:"published_date" json:"published_date,omitempty"`
-	ModifiedDate     string   `yaml:"modified_date" json:"modified_date,omitempty"`
-	PackageSlug      string   `yaml:"package_slug" json:"package_slug"`
-	AffectedRange    string   `yaml:"affected_range" json:"affected_range,omitempty"`
-	FixedVersions    []string `yaml:"fixed_versions" json:"fixed_versions,omitempty"`
-	AffectedVersions []string `yaml:"affected_versions" json:"affected_versions,omitempty"`
-	NotImpacted      string   `yaml:"not_impacted" json:"not_impacted,omitempty"`
-	Solution         string   `yaml:"solution" json:"solution,omitempty"`
-	URLs             []string `yaml:"urls" json:"urls,omitempty"`
-	Credit           []string `yaml:"credit" json:"credit,omitempty"`
+	Identifier       string              `yaml:"identifier" json:"identifier"`
+	Title            string              `yaml:"title" json:"title"`
+	Description      string              `yaml:"description" json:"description"`
+	CVE              string              `yaml:"cve" json:"cve,omitempty"`
+	UUID             string              `yaml:"uuid" json:"uuid,omitempty"`
+	CVSS             string              `yaml:"cvss" json:"cvss,omitempty"`
+	PublishedDate    string              `yaml:"published_date" json:"published_date,omitempty"`
+	ModifiedDate     string              `yaml:"modified_date" json:"modified_date,omitempty"`
+	PackageSlug      string              `yaml:"package_slug" json:"package_slug"`
+	AffectedRange    string              `yaml:"affected_range" json:"affected_range,omitempty"`
+	FixedVersions    FlexibleStringArray `yaml:"fixed_versions" json:"fixed_versions,omitempty"`
+	AffectedVersions FlexibleStringArray `yaml:"affected_versions" json:"affected_versions,omitempty"`
+	NotImpacted      string              `yaml:"not_impacted" json:"not_impacted,omitempty"`
+	Solution         string              `yaml:"solution" json:"solution,omitempty"`
+	URLs             []string            `yaml:"urls" json:"urls,omitempty"`
+	Credit           FlexibleStringArray `yaml:"credit" json:"credit,omitempty"`
 }
 
 // CVEVulnerability represents vulnerability data in CVE format
@@ -240,4 +242,35 @@ type SystemStats struct {
 	QueueDepth          int           `json:"queue_depth"`
 	CacheHitRate        float64       `json:"cache_hit_rate"`
 	Uptime              time.Duration `json:"uptime"`
+}
+
+// FlexibleStringArray handles YAML fields that can be either a string or an array of strings
+type FlexibleStringArray []string
+
+// UnmarshalYAML implements custom YAML unmarshaling for flexible string/array fields
+func (f *FlexibleStringArray) UnmarshalYAML(value *yaml.Node) error {
+	// Handle single string value
+	if value.Kind == yaml.ScalarNode {
+		*f = []string{value.Value}
+		return nil
+	}
+
+	// Handle array of strings
+	if value.Kind == yaml.SequenceNode {
+		var strings []string
+		if err := value.Decode(&strings); err != nil {
+			return err
+		}
+		*f = strings
+		return nil
+	}
+
+	// Return empty array for any other type
+	*f = []string{}
+	return nil
+}
+
+// ToStringSlice converts FlexibleStringArray to []string
+func (f FlexibleStringArray) ToStringSlice() []string {
+	return []string(f)
 }

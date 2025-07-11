@@ -2,6 +2,7 @@ package utils
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"fmt"
 	"math/big"
 )
@@ -58,4 +59,20 @@ func ValidateCustomVulnID(id string) bool {
 	}
 
 	return true
+}
+
+// GenerateDeterministicVulnID generates a deterministic custom vulnerability ID based on source ID
+// Format: VULN-<DETERMINISTIC 4 DIGIT>-<DETERMINISTIC 4 HEX>
+// Example: VULN-1234-A1B2 (always the same for the same input)
+func GenerateDeterministicVulnID(sourceID string) string {
+	// Use SHA256 hash of the source ID to generate deterministic values
+	hash := sha256.Sum256([]byte(sourceID))
+
+	// Extract 4-digit number from first 2 bytes of hash (1000-9999)
+	digits := (int(hash[0])<<8|int(hash[1]))%9000 + 1000
+
+	// Extract 4-character hex from next 2 bytes of hash
+	hex := fmt.Sprintf("%02X%02X", hash[2], hash[3])
+
+	return fmt.Sprintf("VULN-%04d-%s", digits, hex)
 }

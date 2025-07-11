@@ -51,6 +51,59 @@ func (q *Queries) CreateJob(ctx context.Context, arg CreateJobParams) (Job, erro
 	return i, err
 }
 
+const createProcessingStat = `-- name: CreateProcessingStat :one
+INSERT INTO processing_stats (
+    source, processed_count, ingested_count, updated_count, 
+    merged_count, skipped_count, error_count, 
+    start_time, end_time, duration_ms
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+RETURNING id, source, processed_count, ingested_count, updated_count, merged_count, skipped_count, error_count, start_time, end_time, duration_ms, created_at
+`
+
+type CreateProcessingStatParams struct {
+	Source         string             `json:"source"`
+	ProcessedCount int32              `json:"processed_count"`
+	IngestedCount  int32              `json:"ingested_count"`
+	UpdatedCount   int32              `json:"updated_count"`
+	MergedCount    int32              `json:"merged_count"`
+	SkippedCount   int32              `json:"skipped_count"`
+	ErrorCount     int32              `json:"error_count"`
+	StartTime      pgtype.Timestamptz `json:"start_time"`
+	EndTime        pgtype.Timestamptz `json:"end_time"`
+	DurationMs     pgtype.Int4        `json:"duration_ms"`
+}
+
+func (q *Queries) CreateProcessingStat(ctx context.Context, arg CreateProcessingStatParams) (ProcessingStat, error) {
+	row := q.db.QueryRow(ctx, createProcessingStat,
+		arg.Source,
+		arg.ProcessedCount,
+		arg.IngestedCount,
+		arg.UpdatedCount,
+		arg.MergedCount,
+		arg.SkippedCount,
+		arg.ErrorCount,
+		arg.StartTime,
+		arg.EndTime,
+		arg.DurationMs,
+	)
+	var i ProcessingStat
+	err := row.Scan(
+		&i.ID,
+		&i.Source,
+		&i.ProcessedCount,
+		&i.IngestedCount,
+		&i.UpdatedCount,
+		&i.MergedCount,
+		&i.SkippedCount,
+		&i.ErrorCount,
+		&i.StartTime,
+		&i.EndTime,
+		&i.DurationMs,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const deleteCompletedJobs = `-- name: DeleteCompletedJobs :exec
 DELETE FROM jobs 
 WHERE state IN ('completed', 'failed') 
@@ -59,6 +112,15 @@ AND completed_at < $1
 
 func (q *Queries) DeleteCompletedJobs(ctx context.Context, completedAt pgtype.Timestamptz) error {
 	_, err := q.db.Exec(ctx, deleteCompletedJobs, completedAt)
+	return err
+}
+
+const deleteOldProcessingStats = `-- name: DeleteOldProcessingStats :exec
+DELETE FROM processing_stats WHERE start_time < $1
+`
+
+func (q *Queries) DeleteOldProcessingStats(ctx context.Context, startTime pgtype.Timestamptz) error {
+	_, err := q.db.Exec(ctx, deleteOldProcessingStats, startTime)
 	return err
 }
 

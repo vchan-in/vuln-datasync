@@ -19,8 +19,8 @@ BUILD_TIME := $(shell date -u '+%Y-%m-%d_%H:%M:%S_UTC')
 
 # Go configuration
 GO := go
-GOFLAGS := -ldflags="-X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.buildTime=$(BUILD_TIME)"
-GOFLAGS_PROD := -ldflags="-X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.buildTime=$(BUILD_TIME) -s -w"
+GOFLAGS := -buildvcs=false -ldflags="-X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.buildTime=$(BUILD_TIME)"
+GOFLAGS_PROD := -buildvcs=false -ldflags="-X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.buildTime=$(BUILD_TIME) -s -w"
 
 # Docker configuration
 DOCKER_IMAGE := vuln-datasync
@@ -149,7 +149,7 @@ run: build ## Run the application (production mode)
 	LOG_LEVEL="info" \
 	$(BUILD_DIR)/$(BINARY_NAME)
 
-run-dev: migrate ## Run in development mode with hot reload
+run-dev: sqlc-generate migrate build ## Run in development mode with hot reload
 	fuser -k 8080/tcp || true
 	@echo "$(BLUE)Running in development mode...$(RESET)"
 	DB_DSN="$(DB_DSN)" \

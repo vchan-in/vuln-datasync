@@ -26,22 +26,19 @@ func NewNormalizer() *Normalizer {
 
 // NormalizeOSV converts OSV vulnerability to standard format
 func (n *Normalizer) NormalizeOSV(osv *types.OSVVulnerability) (*types.Vulnerability, error) {
-	// Generate custom ID
-	customID, err := utils.GenerateCustomVulnID()
-	if err != nil {
-		return nil, fmt.Errorf(errCustomIDGeneration, err)
-	}
+	// Generate deterministic custom ID based on OSV ID
+	customID := utils.GenerateDeterministicVulnID(osv.ID)
 
-	// Create aliases list including the original OSV ID
+	// Create aliases list with original source IDs only (NOT including our custom VULN ID)
 	aliases := make([]string, 0, len(osv.Aliases)+1)
 	aliases = append(aliases, osv.ID) // Add original OSV ID as first alias
 	aliases = append(aliases, osv.Aliases...)
 
 	vuln := &types.Vulnerability{
-		ID:               customID, // Use custom ID instead of osv.ID
+		ID:               customID, // Use custom VULN ID as primary key
 		Summary:          osv.Summary,
 		Details:          osv.Details,
-		Aliases:          aliases, // Include original ID in aliases
+		Aliases:          aliases, // Contains only original source IDs (OSV-xxx, CVE-xxx, etc.)
 		References:       make(map[string]interface{}),
 		Source:           []string{"osv"},
 		AffectedVersions: []string{},
@@ -121,13 +118,10 @@ func (n *Normalizer) extractOSVReferences(osv *types.OSVVulnerability, vuln *typ
 
 // NormalizeGitLab converts GitLab vulnerability to standard format
 func (n *Normalizer) NormalizeGitLab(gitlab *types.GitLabVulnerability) (*types.Vulnerability, error) {
-	// Generate custom ID
-	customID, err := utils.GenerateCustomVulnID()
-	if err != nil {
-		return nil, fmt.Errorf(errCustomIDGeneration, err)
-	}
+	// Generate deterministic custom ID based on GitLab identifier
+	customID := utils.GenerateDeterministicVulnID(gitlab.Identifier)
 
-	// Create aliases list including the original GitLab ID
+	// Create aliases list with original source IDs only (NOT including our custom VULN ID)
 	aliases := []string{gitlab.Identifier} // Add original GitLab ID as first alias
 
 	// Add CVE to aliases if present
@@ -136,14 +130,14 @@ func (n *Normalizer) NormalizeGitLab(gitlab *types.GitLabVulnerability) (*types.
 	}
 
 	vuln := &types.Vulnerability{
-		ID:               customID, // Use custom ID instead of gitlab.Identifier
+		ID:               customID, // Use custom VULN ID as primary key
 		Summary:          gitlab.Title,
 		Details:          gitlab.Description,
-		Aliases:          aliases, // Include original ID in aliases
+		Aliases:          aliases, // Contains only original source IDs (GitLab ID, CVE-xxx, etc.)
 		References:       make(map[string]interface{}),
 		Source:           []string{"gitlab"},
-		AffectedVersions: gitlab.AffectedVersions,
-		FixedVersions:    gitlab.FixedVersions,
+		AffectedVersions: gitlab.AffectedVersions.ToStringSlice(),
+		FixedVersions:    gitlab.FixedVersions.ToStringSlice(),
 		CreatedAt:        time.Now(),
 		UpdatedAt:        time.Now(),
 	}
@@ -193,18 +187,15 @@ func (n *Normalizer) NormalizeGitLab(gitlab *types.GitLabVulnerability) (*types.
 
 // NormalizeCVE converts CVE vulnerability to standard format
 func (n *Normalizer) NormalizeCVE(cve *types.CVEVulnerability) (*types.Vulnerability, error) {
-	// Generate custom ID
-	customID, err := utils.GenerateCustomVulnID()
-	if err != nil {
-		return nil, fmt.Errorf(errCustomIDGeneration, err)
-	}
+	// Generate deterministic custom ID based on CVE ID
+	customID := utils.GenerateDeterministicVulnID(cve.CVEMetadata.CVEID)
 
-	// Create aliases list including the original CVE ID
+	// Create aliases list with original source IDs only (NOT including our custom VULN ID)
 	aliases := []string{cve.CVEMetadata.CVEID} // Add original CVE ID as first alias
 
 	vuln := &types.Vulnerability{
-		ID:               customID, // Use custom ID instead of cve.CVEMetadata.CVEID
-		Aliases:          aliases,  // Include original ID in aliases
+		ID:               customID, // Use custom VULN ID as primary key
+		Aliases:          aliases,  // Contains only original source IDs (CVE-xxx, etc.)
 		References:       make(map[string]interface{}),
 		Source:           []string{"cve"},
 		AffectedVersions: []string{},

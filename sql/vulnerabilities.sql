@@ -4,6 +4,18 @@ SELECT * FROM vulnerabilities WHERE id = $1;
 -- name: GetVulnerabilityByAlias :one
 SELECT * FROM vulnerabilities WHERE $1 = ANY(aliases) LIMIT 1;
 
+-- name: GetVulnerabilityByAliasWithPriority :one
+SELECT * FROM vulnerabilities 
+WHERE aliases && $1::text[]
+ORDER BY 
+    CASE 
+        WHEN 'osv' = ANY(source) THEN 1
+        WHEN 'gitlab' = ANY(source) THEN 2  
+        WHEN 'cve' = ANY(source) THEN 3
+        ELSE 4
+    END
+LIMIT 1;
+
 -- name: GetVulnerabilitiesByAliases :many
 SELECT * FROM vulnerabilities WHERE aliases && $1::text[];
 
@@ -121,3 +133,7 @@ LIMIT $2;
 
 -- name: GetVulnerabilityStats :one
 SELECT * FROM vulnerability_stats;
+
+-- name: GetAllAliases :many
+SELECT id, unnest(aliases) as alias 
+FROM vulnerabilities;
