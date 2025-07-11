@@ -1,4 +1,3 @@
-<<<<<<<< HEAD:migrations/001_initial_schema.up.sql
 -- Initial schema for vulnerability data synchronization system
 -- Based on learnings from ossdeps POC
 
@@ -169,5 +168,3 @@ COMMENT ON COLUMN vulnerabilities.raw IS 'Complete original data for audit trail
 COMMENT ON TABLE jobs IS 'Background job queue for async processing';
 COMMENT ON TABLE processing_stats IS 'Statistics tracking for vulnerability processing operations';
 COMMENT ON TABLE exports IS 'Tracking table for generated vulnerability database snapshots';
-========
->>>>>>>> main:migrations/001_initial_schema.sql
