@@ -4,10 +4,10 @@ services:
     image: postgres:16
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: L0Quh1ACOYr6GJs2tU1hnT?EVao5A?
+      POSTGRES_PASSWORD: L0Quh1ACOYr6GJs2tU1hnTxEVao5Ax
       POSTGRES_DB: vulndb
     ports:
-      - 5432:5432
+      - "5432:5432"
     volumes:
       - vulndatasync_pgdata:/var/lib/postgresql/data
 
@@ -15,9 +15,20 @@ services:
     container_name: vulndatasync_redis
     image: redis:7
     ports:
-      - 6379:6379
+      - "6379:6379"
     volumes:
       - vulndatasync_redis:/data
+
+  asynq-dashboard:
+    container_name: vulndatasync_asynq_dashboard
+    image: hibiken/asynqmon:latest
+    ports:
+      - "8081:8080"
+    environment:
+      - REDIS_ADDR=redis:6379
+    depends_on:
+      - redis
+    restart: unless-stopped
 
 volumes:
   vulndatasync_pgdata:

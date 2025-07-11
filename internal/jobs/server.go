@@ -9,14 +9,14 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/rs/zerolog/log"
-	"github.com/yourusername/vuln-datasync/internal/config"
-	"github.com/yourusername/vuln-datasync/internal/database"
-	db "github.com/yourusername/vuln-datasync/internal/database/generated"
-	"github.com/yourusername/vuln-datasync/internal/fetchers/cve"
-	"github.com/yourusername/vuln-datasync/internal/fetchers/gitlab"
-	"github.com/yourusername/vuln-datasync/internal/fetchers/osv"
-	"github.com/yourusername/vuln-datasync/internal/merger"
-	"github.com/yourusername/vuln-datasync/internal/types"
+	"github.com/vchan-in/vuln-datasync/internal/config"
+	"github.com/vchan-in/vuln-datasync/internal/database"
+	db "github.com/vchan-in/vuln-datasync/internal/database/generated"
+	"github.com/vchan-in/vuln-datasync/internal/fetchers/cve"
+	"github.com/vchan-in/vuln-datasync/internal/fetchers/gitlab"
+	"github.com/vchan-in/vuln-datasync/internal/fetchers/osv"
+	"github.com/vchan-in/vuln-datasync/internal/merger"
+	"github.com/vchan-in/vuln-datasync/internal/types"
 )
 
 // Job type constants
@@ -158,8 +158,12 @@ func (s *Server) handleSyncVulnerabilities(ctx context.Context, task *asynq.Task
 	// Store processing statistics
 	s.storeProcessingStats(ctx, results)
 
-	if totalErrors > 0 {
-		return fmt.Errorf("sync completed with %d errors", totalErrors)
+	// Only return an error if we have errors AND no processed items, which indicates a complete failure
+	// Otherwise, just warn about the errors but consider the sync successful if some items were processed
+	if totalErrors > 0 && totalProcessed == 0 {
+		return fmt.Errorf("sync completely failed with %d errors and no items processed", totalErrors)
+	} else if totalErrors > 0 {
+		log.Warn().Int("total_errors", totalErrors).Int("total_processed", totalProcessed).Msg("sync completed with some errors")
 	}
 
 	return nil
@@ -203,7 +207,7 @@ func (s *Server) processSingleSource(ctx context.Context, source string, ecosyst
 	return result
 }
 
-// processOSVSource processes OSV vulnerabilities
+// processOSVSource processes OSV vulnerabilities using streaming batch processing
 func (s *Server) processOSVSource(ctx context.Context, ecosystems []string) types.ProcessingResult {
 	result := types.ProcessingResult{
 		Source:    "osv",
@@ -218,35 +222,24 @@ func (s *Server) processOSVSource(ctx context.Context, ecosystems []string) type
 		result.Errors = append(result.Errors, fmt.Sprintf("failed to create OSV fetcher: %v", err))
 		return result
 	}
+	defer func() {
+		if err := fetcher.Close(); err != nil {
+			log.Warn().Err(err).Msg("failed to close OSV fetcher")
+		}
+	}()
 
-	// Fetch OSV vulnerabilities
-	log.Info().Strs("ecosystems", ecosystems).Msg("fetching OSV vulnerabilities")
-	osvVulns, err := fetcher.FetchAll(ctx, ecosystems)
-	if err != nil {
-		result.ErrorCount = 1
-		result.Errors = append(result.Errors, fmt.Sprintf("failed to fetch OSV vulnerabilities: %v", err))
-		return result
-	}
-
-	// Normalize and merge vulnerabilities
+	// Prepare normalizer and merger for batch processing
 	normalizer := merger.NewNormalizer()
-	merger := merger.NewVulnerabilityMerger(s.db)
+	vulnMerger := merger.NewVulnerabilityMerger(s.db)
 
 	// Load alias cache for deduplication
-	if err := merger.LoadAliasCache(ctx); err != nil {
+	if err := vulnMerger.LoadAliasCache(ctx); err != nil {
 		log.Warn().Err(err).Msg("failed to load alias cache, continuing without deduplication")
 	}
 
-	// Process vulnerabilities in batches
-	batchSize := s.config.Performance.BatchSize
-	for i := 0; i < len(osvVulns); i += batchSize {
-		end := i + batchSize
-		if end > len(osvVulns) {
-			end = len(osvVulns)
-		}
-
-		batch := osvVulns[i:end]
-		batchResult := s.processBatch(ctx, batch, normalizer, merger, "osv")
+	// Define batch processor function
+	batchProcessor := func(ctx context.Context, batch []*types.OSVVulnerability) error {
+		batchResult := s.processBatch(ctx, batch, normalizer, vulnMerger, "osv")
 
 		result.ProcessedCount += batchResult.ProcessedCount
 		result.IngestedCount += batchResult.IngestedCount
@@ -255,12 +248,36 @@ func (s *Server) processOSVSource(ctx context.Context, ecosystems []string) type
 		result.SkippedCount += batchResult.SkippedCount
 		result.ErrorCount += batchResult.ErrorCount
 		result.Errors = append(result.Errors, batchResult.Errors...)
+
+		// Log batch progress
+		log.Info().
+			Int("batch_size", len(batch)).
+			Int("total_processed", result.ProcessedCount).
+			Int("total_ingested", result.IngestedCount).
+			Int("total_errors", result.ErrorCount).
+			Msg("OSV batch processed")
+
+		return nil
 	}
+
+	// Fetch and process OSV vulnerabilities in streaming batches
+	log.Info().Strs("ecosystems", ecosystems).Msg("starting OSV vulnerability streaming fetch and processing")
+	batchSize := s.config.Performance.BatchSize
+	err = fetcher.FetchAllWithBatchProcessing(ctx, ecosystems, batchSize, batchProcessor)
+	if err != nil {
+		result.ErrorCount++
+		result.Errors = append(result.Errors, fmt.Sprintf("failed to process OSV vulnerabilities: %v", err))
+		return result
+	}
+
+	result.EndTime = time.Now()
+	result.Duration = result.EndTime.Sub(result.StartTime).String()
 
 	log.Info().
 		Int("processed", result.ProcessedCount).
 		Int("ingested", result.IngestedCount).
 		Int("errors", result.ErrorCount).
+		Dur("duration", result.EndTime.Sub(result.StartTime)).
 		Msg("OSV processing completed")
 
 	return result
@@ -783,11 +800,17 @@ func (s *Server) upsertVulnerability(ctx context.Context, vuln *types.Vulnerabil
 		dataHash = pgtype.Text{String: vuln.DataHash, Valid: true}
 	}
 
+	// Convert summary to pgtype.Text
+	var summary pgtype.Text
+	if vuln.Summary != "" {
+		summary = pgtype.Text{String: vuln.Summary, Valid: true}
+	}
+
 	// Use the generated UpsertVulnerability method
 	queries := db.New(s.db.Pool())
 	_, err = queries.UpsertVulnerability(ctx, db.UpsertVulnerabilityParams{
 		ID:               vuln.ID,
-		Summary:          vuln.Summary,
+		Summary:          summary,
 		Details:          details,
 		Severity:         severity,
 		PublishedAt:      publishedAt,

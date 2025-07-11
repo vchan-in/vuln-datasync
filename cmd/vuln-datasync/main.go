@@ -12,10 +12,10 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
-	"github.com/yourusername/vuln-datasync/internal/api"
-	"github.com/yourusername/vuln-datasync/internal/config"
-	"github.com/yourusername/vuln-datasync/internal/database"
-	"github.com/yourusername/vuln-datasync/internal/jobs"
+	"github.com/vchan-in/vuln-datasync/internal/api"
+	"github.com/vchan-in/vuln-datasync/internal/config"
+	"github.com/vchan-in/vuln-datasync/internal/database"
+	"github.com/vchan-in/vuln-datasync/internal/jobs"
 )
 
 func main() {
@@ -70,6 +70,10 @@ func main() {
 			log.Fatal().Err(err).Msg("background job server failed")
 		}
 	}()
+
+	// Give the job server a moment to initialize
+	time.Sleep(2 * time.Second)
+	log.Info().Msg("job server initialization complete")
 
 	// Initialize HTTP API
 	apiServer := api.NewServer(cfg, db, asynqClient)

@@ -6,9 +6,10 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/rs/zerolog/log"
-	"github.com/yourusername/vuln-datasync/internal/database"
-	"github.com/yourusername/vuln-datasync/internal/types"
+	"github.com/vchan-in/vuln-datasync/internal/database"
+	"github.com/vchan-in/vuln-datasync/internal/types"
 )
 
 // Source type constants for priority-based merging
@@ -113,14 +114,17 @@ func (m *VulnerabilityMerger) FindMatchingVulnerability(ctx context.Context, ali
 	row := m.db.Pool().QueryRow(ctx, query, aliases)
 
 	vuln := &types.Vulnerability{}
-	var refsJSON, rawJSON, sourceJSON []byte
+	var summary, details, severity, ecosystem, packageName, dataHash pgtype.Text
+	var publishedAt, modifiedAt, createdAt, updatedAt pgtype.Timestamptz
+	var affectedVersions, fixedVersions, aliasesArray, sourceArray pgtype.Array[string]
+	var refsJSON, rawJSON pgtype.Text
 
 	err := row.Scan(
-		&vuln.ID, &vuln.Summary, &vuln.Details, &vuln.Severity,
-		&vuln.PublishedAt, &vuln.ModifiedAt, &vuln.Ecosystem, &vuln.PackageName,
-		&vuln.AffectedVersions, &vuln.FixedVersions, &vuln.Aliases,
-		&refsJSON, &sourceJSON, &rawJSON, &vuln.DataHash,
-		&vuln.CreatedAt, &vuln.UpdatedAt,
+		&vuln.ID, &summary, &details, &severity,
+		&publishedAt, &modifiedAt, &ecosystem, &packageName,
+		&affectedVersions, &fixedVersions, &aliasesArray,
+		&refsJSON, &sourceArray, &rawJSON, &dataHash,
+		&createdAt, &updatedAt,
 	)
 
 	if err != nil {
@@ -130,15 +134,62 @@ func (m *VulnerabilityMerger) FindMatchingVulnerability(ctx context.Context, ali
 		return nil, fmt.Errorf("failed to query vulnerability: %w", err)
 	}
 
+	// Convert pgtype values to regular types
+	if summary.Valid {
+		vuln.Summary = summary.String
+	}
+	if details.Valid {
+		vuln.Details = details.String
+	}
+	if severity.Valid {
+		vuln.Severity = severity.String
+	}
+	if ecosystem.Valid {
+		vuln.Ecosystem = ecosystem.String
+	}
+	if packageName.Valid {
+		vuln.PackageName = packageName.String
+	}
+	if dataHash.Valid {
+		vuln.DataHash = dataHash.String
+	}
+	if publishedAt.Valid {
+		vuln.PublishedAt = publishedAt.Time
+	}
+	if modifiedAt.Valid {
+		vuln.ModifiedAt = modifiedAt.Time
+	}
+	if createdAt.Valid {
+		vuln.CreatedAt = createdAt.Time
+	}
+	if updatedAt.Valid {
+		vuln.UpdatedAt = updatedAt.Time
+	}
+
+	// Convert array fields
+	if affectedVersions.Valid {
+		vuln.AffectedVersions = affectedVersions.Elements
+	}
+	if fixedVersions.Valid {
+		vuln.FixedVersions = fixedVersions.Elements
+	}
+	if aliasesArray.Valid {
+		vuln.Aliases = aliasesArray.Elements
+	}
+	if sourceArray.Valid {
+		vuln.Source = sourceArray.Elements
+	}
+
 	// Unmarshal JSON fields
-	if err := json.Unmarshal(refsJSON, &vuln.References); err != nil {
-		log.Error().Err(err).Msg("failed to unmarshal references")
+	if refsJSON.Valid && refsJSON.String != "" {
+		if err := json.Unmarshal([]byte(refsJSON.String), &vuln.References); err != nil {
+			log.Error().Err(err).Msg("failed to unmarshal references")
+		}
 	}
-	if err := json.Unmarshal(rawJSON, &vuln.RawData); err != nil {
-		log.Error().Err(err).Msg("failed to unmarshal raw data")
-	}
-	if err := json.Unmarshal(sourceJSON, &vuln.Source); err != nil {
-		log.Error().Err(err).Msg("failed to unmarshal source")
+	if rawJSON.Valid && rawJSON.String != "" {
+		if err := json.Unmarshal([]byte(rawJSON.String), &vuln.RawData); err != nil {
+			log.Error().Err(err).Msg("failed to unmarshal raw data")
+		}
 	}
 
 	return vuln, nil
@@ -370,29 +421,79 @@ func (m *VulnerabilityMerger) getVulnerabilityByID(ctx context.Context, id strin
 	row := m.db.Pool().QueryRow(ctx, query, id)
 
 	vuln := &types.Vulnerability{}
-	var refsJSON, rawJSON, sourceJSON []byte
+	var summary, details, severity, ecosystem, packageName, dataHash pgtype.Text
+	var publishedAt, modifiedAt, createdAt, updatedAt pgtype.Timestamptz
+	var affectedVersions, fixedVersions, aliasesArray, sourceArray pgtype.Array[string]
+	var refsJSON, rawJSON pgtype.Text
 
 	err := row.Scan(
-		&vuln.ID, &vuln.Summary, &vuln.Details, &vuln.Severity,
-		&vuln.PublishedAt, &vuln.ModifiedAt, &vuln.Ecosystem, &vuln.PackageName,
-		&vuln.AffectedVersions, &vuln.FixedVersions, &vuln.Aliases,
-		&refsJSON, &sourceJSON, &rawJSON, &vuln.DataHash,
-		&vuln.CreatedAt, &vuln.UpdatedAt,
+		&vuln.ID, &summary, &details, &severity,
+		&publishedAt, &modifiedAt, &ecosystem, &packageName,
+		&affectedVersions, &fixedVersions, &aliasesArray,
+		&refsJSON, &sourceArray, &rawJSON, &dataHash,
+		&createdAt, &updatedAt,
 	)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to get vulnerability by ID: %w", err)
 	}
 
+	// Convert pgtype values to regular types
+	if summary.Valid {
+		vuln.Summary = summary.String
+	}
+	if details.Valid {
+		vuln.Details = details.String
+	}
+	if severity.Valid {
+		vuln.Severity = severity.String
+	}
+	if ecosystem.Valid {
+		vuln.Ecosystem = ecosystem.String
+	}
+	if packageName.Valid {
+		vuln.PackageName = packageName.String
+	}
+	if dataHash.Valid {
+		vuln.DataHash = dataHash.String
+	}
+	if publishedAt.Valid {
+		vuln.PublishedAt = publishedAt.Time
+	}
+	if modifiedAt.Valid {
+		vuln.ModifiedAt = modifiedAt.Time
+	}
+	if createdAt.Valid {
+		vuln.CreatedAt = createdAt.Time
+	}
+	if updatedAt.Valid {
+		vuln.UpdatedAt = updatedAt.Time
+	}
+
+	// Convert array fields
+	if affectedVersions.Valid {
+		vuln.AffectedVersions = affectedVersions.Elements
+	}
+	if fixedVersions.Valid {
+		vuln.FixedVersions = fixedVersions.Elements
+	}
+	if aliasesArray.Valid {
+		vuln.Aliases = aliasesArray.Elements
+	}
+	if sourceArray.Valid {
+		vuln.Source = sourceArray.Elements
+	}
+
 	// Unmarshal JSON fields
-	if err := json.Unmarshal(refsJSON, &vuln.References); err != nil {
-		log.Error().Err(err).Msg("failed to unmarshal references")
+	if refsJSON.Valid && refsJSON.String != "" {
+		if err := json.Unmarshal([]byte(refsJSON.String), &vuln.References); err != nil {
+			log.Error().Err(err).Msg("failed to unmarshal references")
+		}
 	}
-	if err := json.Unmarshal(rawJSON, &vuln.RawData); err != nil {
-		log.Error().Err(err).Msg("failed to unmarshal raw data")
-	}
-	if err := json.Unmarshal(sourceJSON, &vuln.Source); err != nil {
-		log.Error().Err(err).Msg("failed to unmarshal source")
+	if rawJSON.Valid && rawJSON.String != "" {
+		if err := json.Unmarshal([]byte(rawJSON.String), &vuln.RawData); err != nil {
+			log.Error().Err(err).Msg("failed to unmarshal raw data")
+		}
 	}
 
 	return vuln, nil

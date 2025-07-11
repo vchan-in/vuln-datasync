@@ -32,7 +32,7 @@ DB_HOST := localhost
 DB_PORT := 5432
 DB_NAME := vulndb
 DB_USER := postgres
-DB_PASSWORD := password
+DB_PASSWORD := L0Quh1ACOYr6GJs2tU1hnTxEVao5Ax
 DB_SSL_MODE := disable
 DB_DSN := postgres://$(DB_USER):$(DB_PASSWORD)@$(DB_HOST):$(DB_PORT)/$(DB_NAME)?sslmode=$(DB_SSL_MODE)
 
@@ -149,7 +149,8 @@ run: build ## Run the application (production mode)
 	LOG_LEVEL="info" \
 	$(BUILD_DIR)/$(BINARY_NAME)
 
-run-dev: ## Run in development mode with hot reload
+run-dev: migrate ## Run in development mode with hot reload
+	fuser -k 8080/tcp || true
 	@echo "$(BLUE)Running in development mode...$(RESET)"
 	DB_DSN="$(DB_DSN)" \
 	REDIS_ADDR="$(REDIS_ADDR)" \

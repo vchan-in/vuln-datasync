@@ -1,0 +1,79 @@
+# Vulnerability Data Synchronization API Tests
+# Use with VS Code REST Client extension or similar HTTP client
+
+@baseUrl = http://localhost:8080
+@apiVersion = v1
+
+### Health Check
+GET {{baseUrl}}/health
+
+### Metrics Endpoint
+GET {{baseUrl}}/metrics
+
+### Get System Statistics
+GET {{baseUrl}}/api/{{apiVersion}}/stats
+
+### Get Current Sync Status
+GET {{baseUrl}}/api/{{apiVersion}}/sync/status
+
+### Trigger Manual Data Synchronization
+# This will start the vulnerability data aggregation process
+POST {{baseUrl}}/api/{{apiVersion}}/sync
+Content-Type: application/json
+
+{
+  "sources": ["osv", "gitlab", "cve"],
+  "force": false,
+  "async": true
+}
+
+### Trigger Force Sync (Override existing data)
+POST {{baseUrl}}/api/{{apiVersion}}/sync
+Content-Type: application/json
+
+{
+  "sources": ["osv", "gitlab", "cve"],
+  "force": true,
+  "async": true
+}
+
+### Trigger Sync for Specific Source Only
+POST {{baseUrl}}/api/{{apiVersion}}/sync
+Content-Type: application/json
+
+{
+  "sources": ["osv"],
+  "force": false,
+  "async": true
+}
+
+### Get Job Status
+GET {{baseUrl}}/api/{{apiVersion}}/jobs/status
+
+### Get Specific Job Details
+# Replace {job-id} with actual job ID from previous requests
+GET {{baseUrl}}/api/{{apiVersion}}/jobs/{job-id}
+
+### Trigger Database Export
+POST {{baseUrl}}/api/{{apiVersion}}/export
+Content-Type: application/json
+
+{
+  "format": "sql",
+  "compression": "gzip",
+  "include_data": true
+}
+
+### List Available Exports
+GET {{baseUrl}}/api/{{apiVersion}}/exports
+
+### Test Batch Operations
+POST {{baseUrl}}/api/{{apiVersion}}/sync
+Content-Type: application/json
+
+{
+  "sources": ["gitlab"],
+  "batch_size": 100,
+  "max_workers": 5,
+  "async": true
+}

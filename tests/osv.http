@@ -1,0 +1,54 @@
+# OSV (Open Source Vulnerabilities) Data Aggregation Tests
+
+@baseUrl = http://localhost:8080
+@apiVersion = v1
+
+### Trigger OSV Data Sync
+POST {{baseUrl}}/api/{{apiVersion}}/sync
+Content-Type: application/json
+
+{
+  "sources": ["osv"],
+  "force": false,
+  "async": true
+}
+
+### Force OSV Data Refresh
+POST {{baseUrl}}/api/{{apiVersion}}/sync
+Content-Type: application/json
+
+{
+  "sources": ["osv"],
+  "force": true,
+  "async": true,
+  "config": {
+    "osv_workers": 20,
+    "batch_size": 1000
+  }
+}
+
+### OSV Performance Test
+POST {{baseUrl}}/api/{{apiVersion}}/sync
+Content-Type: application/json
+
+{
+  "sources": ["osv"],
+  "force": false,
+  "async": true,
+  "config": {
+    "osv_workers": 50,
+    "batch_size": 5000,
+    "enable_metrics": true
+  }
+}
+
+### OSV Incremental Sync
+POST {{baseUrl}}/api/{{apiVersion}}/sync
+Content-Type: application/json
+
+{
+  "sources": ["osv"],
+  "incremental": true,
+  "since": "2024-01-01T00:00:00Z",
+  "async": true
+}
